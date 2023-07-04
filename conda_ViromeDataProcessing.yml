@@ -1,0 +1,26 @@
+name: ViromeDataProcessing
+
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+ # Workflow management
+ - snakemake
+ - graphviz
+ # Initial checks and QC
+ - fastqc
+ - multiqc
+ # Assembly
+ - megahit
+ # Viral contig identification and curation
+ - genomad
+ # Data analysis
+ - r-base
+ - r-tidyverse
+ - r-complexupset
+ - r-quarto
+ - nbclient
+ # Pip packages
+ - pip:
+    - khmer
