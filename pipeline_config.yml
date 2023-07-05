@@ -1,8 +1,0 @@
-samples: "samples.txt"
-rules_to_run:
-  - MergeRuns
-  - RawFastQC
-  - RawMultiQC
-  - QualityFiltering
-  - ProcessedFastQC
-  - ProcessedMultiQC

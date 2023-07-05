@@ -1,9 +1,10 @@
-# QC Snakemake file for CAREERspatial data processing
-
+# QC Snakemake file for RnaOptimisation
 import os
+import yaml
 
-# Create the SAMPLES list from all the .fastq.gz files in the folder
-SAMPLES = [f.replace("_raw_R1.fq.gz", "") for f in os.listdir("0-raw/") if f.endswith("_raw_R1.fq.gz")]
+# Load samples from the file specified in the configuration
+with open(config['samples'], 'r') as f:
+    samples = f.read().splitlines()
 
 # Define the input files as a list of compressed fastq files
 rule all:
@@ -12,15 +13,16 @@ rule all:
 # Adaptor removal and quality filtering on raw reads using bbduk
 rule QualityFiltering:
     input:
-        ForRaw = "0-raw/{sample}_raw_R1.fq.gz",
-        RevRaw = "0-raw/{sample}_raw_R2.fq.gz"
+        ForRaw = "0-raw/{sample}_R1_001.fastq.gz",
+        RevRaw = "0-raw/{sample}_R2_001.fastq.gz"
     output:
         ForQC = "1-ProcessedReads/1.1-QC/{sample}_QC_R1.fq.gz",
         RevQC = "1-ProcessedReads/1.1-QC/{sample}_QC_R2.fq.gz",
         SingleQC = "1-ProcessedReads/1.1-QC/{sample}_QC_U.fq.gz",
         CheckQC = "Checks/{sample}_QC_done.txt"
     resources:
-        mem_mb = 10000
+        mem_mb = 10000,
+        partition = "low2"
     threads:8
     params:
         sname = "{sample}"
@@ -58,7 +60,7 @@ rule ProcessedFastQC:
     '''
 rule MultiQC:
     input:
-        CheckRawFastQC = expand("Checks/{sample}_ProcessedFastQC.txt", sample = SAMPLES)
+        CheckRawFastQC = expand("Checks/{sample}_ProcessedFastQC.txt", sample = samples)
     output:
         paired_multiqc_report = "FastQC/Processed/Paired/ProcessedPairedMultiQC.html"
     params:

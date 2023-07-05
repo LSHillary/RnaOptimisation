@@ -19,6 +19,7 @@ Virome/2-assembly/megahit_temp
 *.err
 *.out
 *.log
+*md5
 
 # Sequencing files
 *.fastq.gz
