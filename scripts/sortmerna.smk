@@ -1,14 +1,15 @@
 # Snakefile for running sortmerna
 
 import os
+import yaml
 
-SAMPLES = [f.replace("_raw_R1.fq.gz", "") for f in os.listdir("0-raw/") if f.endswith("_raw_R1.fq.gz")]
-
-localrules: sortmerna
+# Load samples from the file specified in the configuration
+with open(config['samples'], 'r') as f:
+    samples = f.read().splitlines()
 
 rule all:
     input:
-        expand("Checks/{sample}_sortmerna_done.txt", sample=SAMPLES)
+        expand("Checks/{sample}_sortmerna_done.txt", sample=samples)
 
 rule sortmerna:
     input:
@@ -17,11 +18,14 @@ rule sortmerna:
         CheckQC = "Checks/{sample}_QC_done.txt"
     output:
         CheckSortmeRNA = "Checks/{sample}_sortmerna_done.txt"
-    threads: 40
-    params:
-        mem_mb = 64000,
+    threads: 32
+    resources:
+        mem_mb = 131072,
         sname = "{sample}",
-        cores = 40
+        partition = "high2",
+        time = "2-00:00:00"
+    params:
+        sname = "{sample}"
     message:
         "Running sortmerna on {input.ForQC} and {input.RevQC}"
     shell:'''
@@ -33,6 +37,7 @@ rule sortmerna:
     --aligned 1-ProcessedReads/sortmerna/{params.sname}_paired_rrna \
     --other 1-ProcessedReads/sortmerna/{params.sname}_paired_other \
     --paired_in \
+    --num_alignments 1 \
     --out2 \
     --fastx \
     -v --threads 40 && \

@@ -1,9 +1,6 @@
 # Snakemake for running megahit on a set of samples
-
 import os
-
-# Load the configuration file which will be supplied as argument when running Snakemake
-configfile: "pipeline_config.yml"
+import yaml
 
 # Load samples from the file specified in the configuration
 with open(config['samples'], 'r') as f:
@@ -23,10 +20,10 @@ rule PE_assembly:
         out_contig = "2-assembly/individual/{sample}.contigs.fa"
     threads: 16
     resources:
-        mem_mb = 32000,
+        mem_mb = 64000,
         cores = 16,
-        partition = bmh,
-        time = 5-24:00:00
+        partition = "high2",
+        time = "2-24:00:00"
     params:
         sname = "{sample}",
         output_folder = "2-assembly/individual",

@@ -51,7 +51,8 @@ rule ProcessedFastQC:
         sname = "{sample}"
     threads: 8
     resources:
-        mem_gb = 50
+        mem_gb = 50,
+        partition = "low2"
     shell:'''
     fastqc {input.ForProcessed} -o {params.PairedOutputDirectory} -t 8
     fastqc {input.RevProcessed} -o {params.PairedOutputDirectory} -t 8
@@ -69,7 +70,7 @@ rule MultiQC:
     threads: 8
     resources:
         mem_mb = 24000,
-        partition = "high2",
+        partition = "low2",
         cores = 8
     shell:'''
         multiqc {params.InputDirectory} --filename {output.paired_multiqc_report}
