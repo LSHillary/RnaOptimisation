@@ -1,9 +1,6 @@
 import os
 import yaml
 
-# Load the configuration file which will be supplied as argument when running Snakemake
-configfile: "pipeline_config.yml"
-
 # Load samples from the file specified in the configuration
 with open(config['samples'], 'r') as f:
     samples = f.read().splitlines()

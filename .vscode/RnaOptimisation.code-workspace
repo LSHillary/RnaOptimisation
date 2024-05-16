@@ -1,0 +1,21 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		}
+	],
+	"settings": {
+		"window.title": "RnaOptimisation - Farm",
+		"workbench.colorTheme": "Monokai Pro (Filter Spectrum)",
+		"workbench.colorCustomizations": {
+			"titleBar.activeBackground": "#996666",
+			"titleBar.activeForeground": "#ffffff",
+			"statusBar.background": "#996666",
+			"statusBar.foreground": "#ffffff"
+		},
+		"r.rpath.linux": "/home/lhillary/micromamba/envs/ViromeDataProcessing/bin/R",
+		"r.rterm.linux": "/home/lhillary/micromamba/envs/ViromeDataProcessing/bin/R",
+		"git.ignoreLimitWarning": true
+	}
+	
+}

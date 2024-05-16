@@ -3,10 +3,8 @@ V1DR
 V1LR
 V1plus-DMSO
 V1plus
-V1plus-DMSO-10kb
 V2-
 V2DR
 V2LR
 V2plus-DMSO
 V2plus
-V2plus-DMSO-10kb

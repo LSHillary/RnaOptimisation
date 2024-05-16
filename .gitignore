@@ -3,8 +3,14 @@
 FastQC/
 Checks/
 big_test/
-Virome/2-assembly/megahit_temp
-
+Virome/
+*/Virome/
+rna1/
+rna2/
+dna/
+ribodepletion/
+3-palmscan/
+special/
 # Temporary files
 *swp
 *.info

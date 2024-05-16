@@ -3,8 +3,10 @@ import os
 import yaml
 
 # Load samples from the file specified in the configuration
-with open(config['samples'], 'r') as f:
-    samples = f.read().splitlines()
+#with open(config['samples'], 'r') as f:
+#    samples = f.read().splitlines()
+
+samples = ['T1_1']
 
 rule all:
     input:
@@ -25,6 +27,7 @@ rule PE_assembly:
         partition = "high2",
         time = "8:00:00"
     params:
+        tag = "{sample}",
         sname = "{sample}",
         output_folder = "2-assembly/individual",
         output_temp = "2-assembly/megahit_temp"

@@ -1,0 +1,17 @@
+Nucleotides:
+  DNA:
+    DnaViromes:
+      Ag: ["AGVD1_S133", "AGVD2_S134", "AGVD3_S135"]
+      Pt: ["PTVD1_S139","PTVD2_S140","PTVD3_S141"]
+      Gr: ["JD1_S136","JD2_S137","JD3_S138"]
+  RNA:
+    RnaViromes:
+      Ag: []
+      Pt: []
+      Gr: []
+    MetaTranscriptomes:
+      Ag: []
+      Pt: []
+      Gr: []
+Runs: ["run1", "run2"]
+RunIDs: ["L007","L005"]

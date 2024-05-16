@@ -15,6 +15,13 @@ dependencies:
  - megahit
  # Viral contig identification and curation
  - genomad
+ # Dereplication
+ - drep
+ - mummer
+ - mash
+ - checkm-genome
+ - 
+
  # Data analysis
  - r-base
  - r-tidyverse
