@@ -28,4 +28,4 @@ cd Virome
 micromamba activate ViromeDataProcessing
 
 # Run the pipeline
-snakemake --snakefile ../scripts/1-Preprocessing/1-PreprocessingParent.smk --profile slurm
+snakemake --snakefile ../scripts/4-VirusIdentification/4-VirusIdentification_DNAParent.smk --profile slurm

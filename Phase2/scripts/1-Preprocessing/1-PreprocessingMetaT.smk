@@ -45,43 +45,31 @@ def extract_items(yaml_data, path):
         raise ValueError("The data at the specified path is neither a dictionary nor a list.")
 
 # Example usage, adjust paths according to your YAML structure
-dna_viromes = extract_items(data, ['Nucleotides', 'DNA', 'DnaViromes'])
-
-runs = extract_items(data, ['Runs'])
-
-# Function to map run to runID
-def get_runID(run):
-    if run == "run1":
-        return "L007"
-    elif run == "run2":
-        return "L005"
-    else:
-        return "UNKNOWN"  # Handle other cases if necessary
+metatranscriptomes = extract_items(data, ['Nucleotides', 'RNA', 'MetaTranscriptomes'])
 
 #### PIPELINE ####
 
 # Rule to check and run all processes
 rule all:
     input:
-        expand("Checks/1.1-RawFastQC_{sample}_{run}.done", sample=dna_viromes, run=runs),
-        CheckMultiQC = expand("Checks/1.2-MultiQC_{run}.done", run = runs)
+        CheckDnaFastQC = expand("Checks/1.1-RawFastQC_{sample}_MetaT.done", sample=metatranscriptomes),
+        CheckDnaMultiQC = "Checks/1.2-MultiQC_MetaT.done",
+        CheckPostCoAssemblyCleanup = "Checks/1-PostPreprocessingCleanup.done"
 
-# Rule 1.1 - Run FastQC on merged runs
+# Rule 1.1 - Run FastQC 
 rule RawFastQC:
     input:
-        ForRaw = lambda wildcards: f"0-raw/{wildcards.run}/{wildcards.sample}_{get_runID(wildcards.run)}_R1_001.fastq.gz",
-        RevRaw = lambda wildcards: f"0-raw/{wildcards.run}/{wildcards.sample}_{get_runID(wildcards.run)}_R2_001.fastq.gz",
+        ForRaw = "0-raw/{sample}_L006_R1_001.fastq.gz",
+        RevRaw = "0-raw/{sample}_L006_R2_001.fastq.gz",
     output:
-        CheckRawFastQC = "Checks/1.1-RawFastQC_{sample}_{run}.done"
+        CheckRawFastQC = "Checks/1.1-RawFastQC_{sample}_MetaT.done"
     params:
-        OutputDirectory = "1-Preprocessing/1.1-FastQC/Raw/{run}",
-        tag = "{sample}"
+        OutputDirectory = "1-Preprocessing/1.1-FastQC/Raw/",
+        tag = "{sample}_MetaT"
     threads: 8
     resources:
         mem_mb = 32000,
         partition = "high2"
-    message:
-        "Running FastQC on {wildcards.sample} for run {wildcards.run}"
     shell:'''
         mkdir -p {params.OutputDirectory} && \
         fastqc {input.ForRaw} -o {params.OutputDirectory} -t {threads} && \
@@ -91,17 +79,33 @@ rule RawFastQC:
 
 rule RawMultiQC:
     input:
-        CheckRawFastQC = expand("Checks/1.1-RawFastQC_{sample}_{run}.done", sample = dna_viromes, run = runs)
+        CheckRawFastQC = expand("Checks/1.1-RawFastQC_{sample}_MetaT.done", sample = metatranscriptomes)
     output:
-        CheckMultiQC = "Checks/1.2-MultiQC_{run}.done"
+        CheckMultiQC = "Checks/1.2-MultiQC_MetaT.done"
     params:
-        InputDirectory = "1-Preprocessing/1.1-FastQC/Raw/{run}",
-        OutputDirectory = "1-Preprocessing/1.2-MultiQC/Raw/{run}",
-        tag = "{run}RawMultiQC"
+        InputDirectory = "1-Preprocessing/1.1-FastQC/Raw/",
+        OutputDirectory = "1-Preprocessing/1.2-MultiQC/Raw/",
+        tag = "MetaTRawMultiQC"
     threads: 8
     shell:'''
         mkdir -p {params.OutputDirectory} && \
         multiqc --filename {params.tag} -i {params.tag} -o {params.OutputDirectory} {params.InputDirectory}  && \
-        rm -r 1-Preprocessing/1.1-FastQC/Raw/ && \
         touch {output.CheckMultiQC}
+    '''
+
+rule PostPreProcessingCleanup:
+    input:
+        CheckMultiQC = "Checks/1.2-MultiQC_MetaT.done"
+    output:
+        CheckPostCoAssemblyCleanup = "Checks/1-PostPreprocessingCleanup.done"
+    params:
+        tag = "1-PreprocessingCleanup",
+        local_folder = "1-Preprocessing/",
+        remote_folder = "FARM_archive/RnaOptimisation/Phase2/MetaT/1-Preprocessing/"
+    shell:'''
+    PASSWORD=$(cat ~/box_password.txt)
+    lftp -e "mirror -R --overwrite --only-newer --delete \
+    {params.local_folder} {params.remote_folder}; bye" -u lhillary@ucdavis.edu,$PASSWORD ftps://ftp.box.com && \
+    rm -r {params.local_folder} && \
+    touch {output}
     '''

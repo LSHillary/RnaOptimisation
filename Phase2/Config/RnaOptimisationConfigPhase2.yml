@@ -6,12 +6,12 @@ Nucleotides:
       Gr: ["JD1_S136","JD2_S137","JD3_S138"]
   RNA:
     RnaViromes:
-      Ag: []
-      Pt: []
-      Gr: []
+      Ag: ["AGVR1M_S1","AGVR1P_S2","AGVR2M_S3","AGVR2P_S4","AGVR3M_S5","AGVR3P_S6"]
+      Pt: ["PTVR1M_S13","PTVR1P_S14","PTVR1P_S14","PTVR2M_S15","PTVR2P_S16","PTVR3M_S17","PTVR3P_S18"]
+      Gr: ["JR1M_S7","JR1P_S8","JR2M_S9","JR2P_S10","JR3M_S11","JR3P_S12"]
     MetaTranscriptomes:
-      Ag: []
-      Pt: []
-      Gr: []
-Runs: ["run1", "run2"]
-RunIDs: ["L007","L005"]
+      Ag: ["AG1TM_S19","AG1TP_S20","AG2TM_S21","AG2TP_S22","AG3TM_S23","AG3TP_S24"]
+      Pt: ["PT1TM_S31","PT1TP_S32","PT2TM_S33","PT2TP_S34","PT3TM_S35","PT3TP_S36"]
+      Gr: ["JP1TM_S25","JP1TP_S26","JP2TM_S27","JP2TP_S28","JP3TM_S29","JP3TP_S30"]
+DnaRuns: ["run1", "run2", "run3"]
+RnaRuns: ["run1"]

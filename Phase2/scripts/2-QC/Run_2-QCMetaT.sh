@@ -22,10 +22,10 @@
 source ~/.bashrc
 
 # Move into the directory that you want to run the pipeline from
-cd Virome
+cd MetaT
 
 # Activate the conda environment
 micromamba activate ViromeDataProcessing
 
 # Run the pipeline
-snakemake --snakefile ../scripts/2-QC/2-QC_Dna.smk --profile slurm
+snakemake --snakefile ../scripts/2-QC/2-QC_MetaT.smk --profile slurm

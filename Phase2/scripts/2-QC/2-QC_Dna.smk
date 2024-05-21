@@ -46,34 +46,40 @@ def extract_items(yaml_data, path):
 
 # Example usage, adjust paths according to your YAML structure
 dna_viromes = extract_items(data, ['Nucleotides', 'DNA', 'DnaViromes'])
+rna_viromes = extract_items(data, ['Nucleotides', 'RNA', 'RnaViromes'])
+metatranscriptomes = extract_items(data, ['Nucleotides', 'RNA', 'MetaTranscriptomes'])
 
-runs = extract_items(data, ['Runs'])
-
+DnaRuns = extract_items(data, ['DnaRuns'])
+RnaRuns = extract_items(data, ['RnaRuns'])
 # Function to map run to runID
-def get_runID(run):
+def get_DnaRunID(run):
     if run == "run1":
         return "L007"
     elif run == "run2":
         return "L005"
+    elif run == "run3":
+        return "L001"
     else:
         return "UNKNOWN"  # Handle other cases if necessary
 
 #### PIPELINE ####
 
+
 # Rule to check and run all processes
 rule all:
     input:
-        CheckMultiQC = expand("Checks/2.3-PostFilteringMultiQC_{run}.done", run = runs),
+        CheckMultiQC = expand("Checks/2.3-PostFilteringMultiQC_{run}.done", run = DnaRuns),
+        CheckPCRDedup = expand("Checks/2.5_Dedup_{sample}_{run}.done", sample = dna_viromes, run = DnaRuns),
 #### 2 - QC Filtering ####
 
 # Rule 2.1 Adaptor removal and quality filtering on raw reads using bbduk
 rule QualityFiltering:
     input:
-        ForRaw = lambda wildcards: f"0-raw/{wildcards.run}/{wildcards.sample}_{get_runID(wildcards.run)}_R1_001.fastq.gz",
-        RevRaw = lambda wildcards: f"0-raw/{wildcards.run}/{wildcards.sample}_{get_runID(wildcards.run)}_R2_001.fastq.gz",
+        ForRaw = lambda wildcards: f"0-raw/{wildcards.run}/{wildcards.sample}_{get_DnaRunID(wildcards.run)}_R1_001.fastq.gz",
+        RevRaw = lambda wildcards: f"0-raw/{wildcards.run}/{wildcards.sample}_{get_DnaRunID(wildcards.run)}_R2_001.fastq.gz",
     output:
-        ForQC=temp("2-QC/2.1-Filtering/{sample}_{run}_QC_R1.fq.gz"),
-        RevQC=temp("2-QC/2.1-Filtering/{sample}_{run}_QC_R2.fq.gz"),
+        ForQC="2-QC/2.1-Filtering/{sample}_{run}_QC_R1.fq.gz",
+        RevQC="2-QC/2.1-Filtering/{sample}_{run}_QC_R2.fq.gz",
         CheckQC="Checks/2-QC_{sample}_{run}.done"
     resources:
         mem_mb=10000
@@ -100,7 +106,7 @@ rule FilteringFastQC:
     output:
         CheckProcessedFastQC="Checks/FilteredFastQC_{sample}_{run}.done"
     params:
-        PairedOutputDirectory="2-QC/FastQC/Filtered/Paired",
+        PairedOutputDirectory="2-QC/2.2-FastQC/Filtered/Paired",
         tag="{sample}"
     threads: 4
     resources:
@@ -115,12 +121,12 @@ rule FilteringFastQC:
 # Rule 2.3 - MultiQC on filtered reads
 rule PostFilteringMultiQC:
     input:
-        CheckFilteringFastQC = expand("Checks/FilteredFastQC_{sample}_{run}.done", sample = dna_viromes, run = runs)
+        CheckFilteringFastQC = expand("Checks/FilteredFastQC_{sample}_{run}.done", sample = dna_viromes, run = DnaRuns)
     output:
         CheckMultiQC = "Checks/2.3-PostFilteringMultiQC_{run}.done"
     params:
-        InputDirectory = "2-QC/FastQC/Filtered/Paired",
-        OutputDirectory = "2-QC/2.2-MultiQC/Filtered/{run}",
+        InputDirectory = "2-QC/2.2-FastQC/Filtered/Paired",
+        OutputDirectory = "2-QC/2.3-MultiQC/Filtered/{run}",
         tag = "{run}_FilteredMultiQC"
     threads: 8
     shell:'''
@@ -133,13 +139,12 @@ rule PostFilteringMultiQC:
 # Rule 2.4 Error correction using tadpole
 rule ErrorCorrection:
     input:
-        ForQC="2-QC/2.1-Filtering/{sample}_run2_QC_R1.fq.gz",
-        RevQC="2-QC/2.1-Filtering/{sample}_run2_QC_R2.fq.gz",
-        CheckQC="Checks/2.3-PostFilteringMultiQC_run2.done"
+        ForQC="2-QC/2.1-Filtering/{sample}_{run}_QC_R1.fq.gz",
+        RevQC="2-QC/2.1-Filtering/{sample}_{run}_QC_R2.fq.gz"
     output:
-        ForEC="2-QC/2.4-ErrorCorrection/{sample}_run2_EC_R1.fq.gz",
-        RevEC="2-QC/2.4-ErrorCorrection/{sample}_run2_EC_R2.fq.gz",
-        CheckEC="Checks/2.4_EC_{sample}_run2.done"
+        ForEC="2-QC/2.4-ErrorCorrection/{sample}_{run}_EC_R1.fq.gz",
+        RevEC="2-QC/2.4-ErrorCorrection/{sample}_{run}_EC_R2.fq.gz",
+        CheckEC="Checks/2.4_EC_{sample}_{run}.done"
     resources:
         mem_mb=32000,
         partition = "high2"
@@ -164,13 +169,13 @@ rule ErrorCorrection:
 # Rule 2.5 PCR duplicate removal using clumpify
 rule PcrDuplicateRemoval:
     input:
-        ForEC="2-QC/2.4-ErrorCorrection/{sample}_run2_EC_R1.fq.gz",
-        RevEC="2-QC/2.4-ErrorCorrection/{sample}_run2_EC_R2.fq.gz",
-        CheckEC="Checks/2.4_EC_{sample}_run2.done"
+        ForEC="2-QC/2.4-ErrorCorrection/{sample}_{run}_EC_R1.fq.gz",
+        RevEC="2-QC/2.4-ErrorCorrection/{sample}_{run}_EC_R2.fq.gz",
+        CheckEC="Checks/2.4_EC_{sample}_{run}.done"
     output:
-        ForDedup="2-QC/2.5-Deduplication/{sample}_run2_Dedup_R1.fq.gz",
-        RevDedup="2-QC/2.5-Deduplication/{sample}_run2_Dedup_R2.fq.gz",
-        CheckDedup="Checks/2.5_Dedup_{sample}_run2.done"
+        ForDedup="2-QC/2.5-Deduplication/{sample}_{run}_Dedup_R1.fq.gz",
+        RevDedup="2-QC/2.5-Deduplication/{sample}_{run}_Dedup_R2.fq.gz",
+        CheckDedup="Checks/2.5_Dedup_{sample}_{run}.done"
     resources:
         mem_mb=24000,
         partition = "high2"
@@ -194,7 +199,7 @@ rule PcrDuplicateRemoval:
 
 rule PostQCCleanup:
     input:
-        CheckDedup = expand("Checks/2.5_Dedup_{sample}_run2.done", sample = dna_viromes)
+        CheckDedup = expand("Checks/2.5_Dedup_{sample}_{run}.done", sample = dna_viromes, run = DnaRuns)
     output:
         CheckQCCleanup = "Checks/2-PostQCCleanup.done"
     params:
