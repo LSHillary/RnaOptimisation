@@ -45,7 +45,7 @@ def extract_items(yaml_data, path):
         raise ValueError("The data at the specified path is neither a dictionary nor a list.")
 
 # Example usage, adjust paths according to your YAML structure
-dna_viromes = extract_items(data, ['Nucleotides', 'DNA', 'DnaViromes'])
+rna_viromes = extract_items(data, ['Nucleotides', 'RNA', 'RnaViromes'])
 
 #### PIPELINE ####
 
@@ -53,17 +53,16 @@ dna_viromes = extract_items(data, ['Nucleotides', 'DNA', 'DnaViromes'])
 rule all:
     input:
         #CheckAssembly = expand("Checks/3-PostQCCleanup_{sample}.done", sample = dna_viromes),
-        CheckRenameAssemblyContigs = expand("Checks/3.2-RenameContigs_{sample}.done", sample = dna_viromes),
+        CheckRenameAssemblyContigs = expand("Checks/3.2-RenameContigs_{sample}.done", sample = rna_viromes),
+        CheckGenomad = expand("Checks/4.1-Genomad_{sample}.done", sample = rna_viromes),
 
 # Assembly of all samples by bucket using megahit
 rule Assembly_megahit:
     input:
         For1="2-QC/2.5-Deduplication/{sample}_run1_Dedup_R1.fq.gz",
         Rev1="2-QC/2.5-Deduplication/{sample}_run1_Dedup_R2.fq.gz",
-        For2="2-QC/2.5-Deduplication/{sample}_run2_Dedup_R1.fq.gz",
-        Rev2="2-QC/2.5-Deduplication/{sample}_run2_Dedup_R2.fq.gz",
-        For3="2-QC/2.5-Deduplication/{sample}_run3_Dedup_R1.fq.gz",
-        Rev3="2-QC/2.5-Deduplication/{sample}_run3_Dedup_R2.fq.gz",
+        #For2="2-QC/2.5-Deduplication/{sample}_run2_Dedup_R1.fq.gz",
+        #Rev2="2-QC/2.5-Deduplication/{sample}_run2_Dedup_R2.fq.gz",
     output:
         CheckMegahitAssembly="Checks/3.1-Assembly_{sample}.done"
     params:
@@ -77,7 +76,7 @@ rule Assembly_megahit:
         time="2-00:00:00"
     shell:'''
         mkdir -p {params.output_temp} && \
-        megahit -1 {input.For1},{input.For2},{input.For3} -2 {input.Rev1},{input.Rev2},{input.Rev3} \
+        megahit -1 {input.For1} -2 {input.Rev1} \
         -t {threads} --continue --k-min 27 --presets meta-large \
         --out-dir {params.output_temp}/{params.tag} \
         --out-prefix {params.tag} && touch {output.CheckMegahitAssembly}
@@ -98,6 +97,30 @@ rule RenameAssemblyContigs:
     awk '/^>/{{print ">" "{params.tag}" "_contig_" ++i; next}}{{print}}' < {params.contigs} > {output.renamed_contigs} && \
     touch {output.CheckRenameAssemblyContigs}
     '''
+
+rule GeNomadIndividual:
+    input:
+        ContigsIn = "3-Assembly/Contigs/{sample}_renamed_contigs.fna",
+        CheckRenameAssemblyContigs = "Checks/3.2-RenameContigs_{sample}.done"
+    output:
+        CheckGenomad = "Checks/4.1-Genomad_{sample}.done"
+    threads: 12
+    params:
+        tag = "{sample}",
+        GenomadDB = "/group/jbemersogrp/databases/genomad/genomad_db",
+        GenomadFolder = "4-virus_identification/genomad/{sample}"
+    resources:
+        mem_mb = 65536,
+        partition = "high2",
+        time = "3-00:00:00"
+    shell:'''
+        mkdir -p {params.GenomadFolder} && \
+        micromamba run -n genomad_env genomad end-to-end --cleanup --enable-score-calibration -t {threads} {input.ContigsIn} \
+        {params.GenomadFolder} {params.GenomadDB} && \
+        touch {output.CheckGenomad}
+        '''
+
+
 # Clean up and archive all intermediate files not needed in future steps
 rule PostAssemblyCleanup:
     input:
@@ -119,7 +142,7 @@ rule PostAssemblyCleanup:
 # Rule to push assembly reads to Box
 rule PushAssemblyReadsToBox:
     input:
-        CheckRenameAssemblyContigs = expand("Checks/3.4-RenameContigs_{sample}.done", sample=dna_viromes),
+        CheckRenameAssemblyContigs = expand("Checks/3.4-RenameContigs_{sample}.done", sample=rna_viromes),
     output:
         CheckAssemblyReadsCleanup = "Checks/3-ReadsUpload.done"
     params:

@@ -52,79 +52,10 @@ metatranscriptomes = extract_items(data, ['Nucleotides', 'RNA', 'MetaTranscripto
 # Rule to check and run all processes
 rule all:
     input:
-        CheckMultiQC = expand("Checks/2.3-PostFilteringMultiQC.done"),
-        #CheckSortmeRNA = expand("Checks/2.4a_sortmerna_{sample}.done", sample=metatranscriptomes),
-        CheckRibodetector = expand("Checks/2.4a_ribodetector_{sample}.done", sample = metatranscriptomes),
-        CheckPCRDedup = expand("Checks/2.5_Dedup_{sample}.done", sample=metatranscriptomes),
-#### 2 - QC Filtering ####
+        #CheckAssembly = expand("Checks/3-PostQCCleanup_{sample}.done", sample = metatranscriptomes),
+        CheckRenameAssemblyContigs = expand("Checks/3.2-RenameContigs_{sample}.done", sample = metatranscriptomes),
+        CheckGenomad = expand("Checks/4.1-Genomad_{sample}.done", sample = metatranscriptomes),
 
-# Rule 2.1 Adaptor removal and quality filtering on raw reads using bbduk
-rule QualityFiltering:
-    input:
-        ForRaw = "0-raw/{sample}_L006_R1_001.fastq.gz",
-        RevRaw = "0-raw/{sample}_L006_R2_001.fastq.gz",
-    output:
-        ForQC="2-QC/2.1-Filtering/{sample}_QC_R1.fq.gz",
-        RevQC="2-QC/2.1-Filtering/{sample}_QC_R2.fq.gz",
-        CheckQC="Checks/2-QC_{sample}.done"
-    resources:
-        mem_mb=30000
-    threads: 4
-    params:
-        tag="{sample}"
-    message: "QC filtering using bbduk"
-    shell:'''
-        mkdir -p 2-QC/2.1-Filtering && \
-        bbduk.sh in={input.ForRaw} in2={input.RevRaw} \
-        ref=adapters,phix ktrim=r k=23 mink=10 rcomp=t hdist=1 tpe tbo threads={threads} \
-        qtrim=r trimq=10 maxns=3 maq=3 minlen=50 mlf=0.333 mingc=0.05 maxgc=0.95 \
-        out={output.ForQC} out2={output.RevQC} \
-        && \
-        touch {output.CheckQC}
-    '''
-
-# Rule 2.2 Run FastQC on processed reads
-rule FilteringFastQC:
-    input:
-        ForProcessed="2-QC/2.1-Filtering/{sample}_QC_R1.fq.gz",
-        RevProcessed="2-QC/2.1-Filtering/{sample}_QC_R2.fq.gz",
-        CheckQC="Checks/2-QC_{sample}.done"
-    output:
-        CheckProcessedFastQC="Checks/FilteredFastQC_{sample}.done"
-    params:
-        PairedOutputDirectory="2-QC/2.2-FastQC/Filtered/Paired",
-        tag="{sample}"
-    threads: 4
-    resources:
-        mem_mb=64000,
-        partition="bmh"
-    shell:'''
-        mkdir -p {params.PairedOutputDirectory} && \
-        fastqc {input.ForProcessed} -o {params.PairedOutputDirectory} -t {threads} && \
-        fastqc {input.RevProcessed} -o {params.PairedOutputDirectory} -t {threads} && \
-        touch {output.CheckProcessedFastQC}
-    '''
-# Rule 2.3 - MultiQC on filtered reads
-rule PostFilteringMultiQC:
-    input:
-        CheckFilteringFastQC = expand("Checks/FilteredFastQC_{sample}.done", sample=metatranscriptomes)
-    output:
-        CheckMultiQC = "Checks/2.3-PostFilteringMultiQC.done"
-    params:
-        InputDirectory = "2-QC/2.2-FastQC/Filtered/Paired",
-        OutputDirectory = "2-QC/2.3-MultiQC/Filtered/",
-        tag = "FilteredMultiQC"
-    threads: 8
-    resources:
-        mem_mb=128000,
-        partition="bmh"
-    shell:'''
-        mkdir -p {params.OutputDirectory} && \
-        multiqc --filename {params.tag} -i {params.tag} -o {params.OutputDirectory} {params.InputDirectory}  && \
-        touch {output.CheckMultiQC}
-    '''
-
-# Rule 2.4 Error correction using tadpole
 rule ErrorCorrection:
     input:
         ForQC="2-QC/2.1-Filtering/{sample}_QC_R1.fq.gz",
@@ -134,9 +65,9 @@ rule ErrorCorrection:
         RevEC="2-QC/2.4-ErrorCorrection/{sample}_EC_R2.fq.gz",
         CheckEC="Checks/2.4_EC_{sample}.done"
     resources:
-        mem_mb=64000,
+        mem_mb=100000,
         partition = "bmh"
-    threads: 8
+    threads: 16
     params:
         tag="{sample}",
         OutputDirectory = "2-QC/2.4-ErrorCorrection"
@@ -152,39 +83,6 @@ rule ErrorCorrection:
         threads={threads} \
     && \
     touch {output.CheckEC}
-    '''
-
-rule sortmerna:
-    input:
-        ForEC="2-QC/2.4-ErrorCorrection/{sample}_EC_R1.fq.gz",
-        RevEC="2-QC/2.4-ErrorCorrection/{sample}_EC_R2.fq.gz",
-        CheckEC="Checks/2.4_EC_{sample}.done"
-    output:
-        CheckSortmeRNA = "Checks/2.4a_sortmerna_{sample}.done"
-    threads: 32
-    resources:
-        mem_mb = 131072,
-        partition = "bmh",
-        time = "2-00:00:00"
-    params:
-        tag = "{sample}"
-    message:
-        "Running sortmerna on {input.ForEC} and {input.RevEC}"
-    shell:'''
-    sortmerna --ref /group/jbemersogrp/databases/sortmerna/smr_v4.3_sensitive_db.fasta \
-    --reads {input.ForEC} \
-    --reads {input.RevEC} \
-    --workdir 2-QC/sortmerna/{params.tag}_wd \
-    --idx-dir /home/lhillary/sortmerna/run/idx/ \
-    --aligned 2-QC/2.4a-sortmerna/{params.tag}_paired_rrna \
-    --other 2-QC/2.4a-sortmerna/{params.tag}_paired_other \
-    --paired_in \
-    --no-best \
-    --num_alignments 1 \
-    --out2 \
-    --fastx \
-    --threads {threads} && \
-    touch {output.CheckSortmeRNA}
     '''
 
 rule ribodetector:
@@ -250,19 +148,108 @@ rule PcrDuplicateRemoval:
         touch {output.CheckDedup}
     '''
 
-rule PostQCCleanup:
+# Assembly of all samples by bucket using megahit
+rule Assembly_megahit:
     input:
-        CheckDedup = expand("Checks/2.5_Dedup_{sample}.done", sample=metatranscriptomes)
+        For1="2-QC/2.5-Deduplication/{sample}_Dedup_R1.fq.gz",
+        Rev1="2-QC/2.5-Deduplication/{sample}_Dedup_R2.fq.gz",
     output:
-        CheckQCCleanup = "Checks/2-PostQCCleanup.done"
+        CheckMegahitAssembly="Checks/3.1-Assembly_{sample}.done"
     params:
-        tag = "2-QCCleanup",
-        local_folder = "2-QC/2.2-MultiQC/",
-        remote_folder = "FARM_archive/TestData/2-QC/MultiQC"
+        tag="{sample}",
+        output_folder="3-Assembly/Contigs",
+        output_temp="3-Assembly/megahit_temp",
+    threads: 16
+    resources:
+        mem_mb=48000,
+        partition="bmh",
+        time="2-00:00:00"
+    shell:'''
+        mkdir -p {params.output_temp} && \
+        megahit -1 {input.For1} -2 {input.Rev1} \
+        -t {threads} --continue --k-min 27 --presets meta-large \
+        --out-dir {params.output_temp}/{params.tag} \
+        --out-prefix {params.tag} && touch {output.CheckMegahitAssembly}
+        '''
+
+
+# Rename coassembled contigs
+rule RenameAssemblyContigs:
+    input:
+        CheckMegahitAssembly = "Checks/3.1-Assembly_{sample}.done"
+    output:
+        renamed_contigs = "3-Assembly/Contigs/{sample}_renamed_contigs.fna",
+        CheckRenameAssemblyContigs = "Checks/3.2-RenameContigs_{sample}.done"
+    params:
+        tag = "{sample}",
+        contigs = "3-Assembly/megahit_temp/{sample}/{sample}.contigs.fa"
+    shell:'''
+    awk '/^>/{{print ">" "{params.tag}" "_contig_" ++i; next}}{{print}}' < {params.contigs} > {output.renamed_contigs} && \
+    touch {output.CheckRenameAssemblyContigs}
+    '''
+
+rule GeNomadIndividual:
+    input:
+        ContigsIn = "3-Assembly/Contigs/{sample}_renamed_contigs.fna",
+        CheckRenameAssemblyContigs = "Checks/3.2-RenameContigs_{sample}.done"
+    output:
+        CheckGenomad = "Checks/4.1-Genomad_{sample}.done"
+    threads: 12
+    params:
+        tag = "{sample}",
+        GenomadDB = "/group/jbemersogrp/databases/genomad/genomad_db",
+        GenomadFolder = "4-virus_identification/genomad/{sample}"
+    resources:
+        mem_mb = 65536,
+        partition = "high2",
+        time = "3-00:00:00"
+    shell:'''
+        micromamba run -n genomad_env genomad end-to-end --cleanup --composition virome --enable-score-calibration -t {threads} {input.ContigsIn} \
+        {params.GenomadFolder} {params.GenomadDB} && \
+        touch {output.CheckGenomad}
+        '''
+
+
+# Clean up and archive all intermediate files not needed in future steps
+rule PostAssemblyCleanup:
+    input:
+        CheckRenameAssemblyContigs = "Checks/3.2-RenameContigs_{sample}.done"
+    output:
+        CheckAssemblyCleanup = "Checks/3-PostQCCleanup_{sample}.done"
+    params:
+        tag = "{sample}",
+        local_Assembly = "3-Assembly/megahit_temp/{sample}",
+        remote_Assembly = "FARM_archive/TestData/3-Assembly/megahit_temp/{sample}",
     shell:'''
     PASSWORD=$(cat ~/box_password.txt)
     lftp -e "mirror -R --overwrite --only-newer --delete \
-    {params.local_folder} {params.remote_folder}; bye" -u lhillary@ucdavis.edu,$PASSWORD ftps://ftp.box.com && \
-    rm -r {params.local_folder} && \
-    touch {output.CheckQCCleanup}
+    {params.local_Assembly} {params.remote_Assembly}; bye" -u lhillary@ucdavis.edu,$PASSWORD ftps://ftp.box.com && \
+    rm -r {params.local_Assembly} && \
+    touch {output.CheckAssemblyCleanup}
     '''
+
+# Rule to push assembly reads to Box
+rule PushAssemblyReadsToBox:
+    input:
+        CheckRenameAssemblyContigs = expand("Checks/3.4-RenameContigs_{sample}.done", sample=metatranscriptomes),
+    output:
+        CheckAssemblyReadsCleanup = "Checks/3-ReadsUpload.done"
+    params:
+        tag = "PushReadsToBox",
+        local_reads_dir = "2-QC/2.5-Deduplication/",
+        local_filtered_reads_dir = "2-QC/2.1-Filtering",
+        remote_reads_dir = "FARM_archive/TestData/2-QC/2.5-Deduplication/",
+        remote_filtered_reads_dir = "FARM_archive/TestData/2-QC/2.1-Filtering/"
+    shell:
+        '''
+        PASSWORD=$(cat ~/box_password.txt)
+        #lftp -e "mirror -R --overwrite --only-newer --delete \
+        #{params.local_reads_dir} {params.remote_reads_dir}; bye" -u lhillary@ucdavis.edu,$PASSWORD ftps://ftp.box.com && \
+        #rm -r {params.local_reads_dir} && \
+        && \
+        lftp -e "mirror -R --overwrite --only-newer --delete \
+        {params.local_filtered_reads_dir} {params.remote_filtered_reads_dir}; bye" -u lhillary@ucdavis.edu,$PASSWORD ftps://ftp.box.com && \
+        #rm -r {params.local_reads_dir} && \
+        rm -r {params.local_filtered_reads_dir} && \
+        touch {output.CheckAssemblyReadsCleanup}
+        '''

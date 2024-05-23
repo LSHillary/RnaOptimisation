@@ -28,4 +28,4 @@ cd RnaVirome
 micromamba activate ViromeDataProcessing
 
 # Run the pipeline
-snakemake --snakefile ../scripts/2-QC/2-QC_Rna.smk --profile slurm --keep-incomplete
+snakemake --snakefile ../scripts/3-Assembly/3-Assembly_Rna.smk --profile slurm

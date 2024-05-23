@@ -67,6 +67,8 @@ def get_RnaRunID(run):
 rule all:
     input:
         CheckMultiQC = expand("Checks/2.3-PostFilteringMultiQC_{run}.done", run = RnaRuns),
+        CheckSortmeRNA = expand("Checks/2.4a_sortmerna_{sample}_{run}.done", sample = rna_viromes, run = RnaRuns),
+        #CheckRibodetector = expand("Checks/2.4a_ribodetector_{sample}_{run}.done", sample = rna_viromes, run = RnaRuns),
         CheckPCRDedup = expand("Checks/2.5_Dedup_{sample}_{run}.done", sample = rna_viromes, run = RnaRuns),
 #### 2 - QC Filtering ####
 
@@ -130,7 +132,6 @@ rule PostFilteringMultiQC:
     shell:'''
         mkdir -p {params.OutputDirectory} && \
         multiqc --filename {params.tag} -i {params.tag} -o {params.OutputDirectory} {params.InputDirectory}  && \
-        rm -r 2-QC/2.2-MultiQC/Filtered && \
         touch {output.CheckMultiQC}
     '''
 
@@ -164,29 +165,93 @@ rule ErrorCorrection:
     touch {output.CheckEC}
     '''
 
-# Rule 2.5 PCR duplicate removal using clumpify
-rule PcrDuplicateRemoval:
+rule sortmerna:
     input:
         ForEC="2-QC/2.4-ErrorCorrection/{sample}_{run}_EC_R1.fq.gz",
         RevEC="2-QC/2.4-ErrorCorrection/{sample}_{run}_EC_R2.fq.gz",
         CheckEC="Checks/2.4_EC_{sample}_{run}.done"
+    output:
+        CheckSortmeRNA = "Checks/2.4a_sortmerna_{sample}_{run}.done"
+    threads: 32
+    resources:
+        mem_mb = 131072,
+        tag = "{sample}_{run}",
+        partition = "bmh",
+        time = "2-00:00:00"
+    params:
+        tag = "{sample}_{run}"
+    shell:'''
+    sortmerna --ref /group/jbemersogrp/databases/sortmerna/smr_v4.3_sensitive_db.fasta \
+    --reads {input.ForEC} \
+    --reads {input.RevEC} \
+    --workdir 2-QC/sortmerna/{params.tag}_wd \
+    --idx-dir /home/lhillary/sortmerna/run/idx/ \
+    --aligned 2-QC/2.4a-sortmerna/{params.tag}_paired_rrna \
+    --other 2-QC/2.4a-sortmerna/{params.tag}_paired_other \
+    --paired_in \
+    --no-best \
+    --num_alignments 1 \
+    --out2 \
+    --fastx \
+    --threads {threads} && \
+    touch {output.CheckSortmeRNA}
+    '''
+
+rule ribodetector:
+    input:
+        ForEC="2-QC/2.4-ErrorCorrection/{sample}_{run}_EC_R1.fq.gz",
+        RevEC="2-QC/2.4-ErrorCorrection/{sample}_{run}_EC_R2.fq.gz",
+        CheckEC="Checks/2.4_EC_{sample}_{run}.done"
+    output:
+        CheckRibodetector = "Checks/2.4a_ribodetector_{sample}_{run}.done",
+        ForRD = "2-QC/2.4a-ribodetector/{sample}_{run}_RD_R1.fq.gz",
+        RevRD = "2-QC/2.4a-ribodetector/{sample}_{run}_RD_R2.fq.gz",
+        ForRRNA = "2-QC/2.4a-ribodetector/{sample}_{run}_RRNA_R1.fq.gz",
+        RevRRNA = "2-QC/2.4a-ribodetector/{sample}_{run}_RRNA_R2.fq.gz",
+        ReadStats = "2-QC/2.4a-ribodetector/{sample}_{run}_stats.tsv"
+    threads: 32
+    resources:
+        mem_mb = 32768,
+        partition = "bmh",
+        time = "2-00:00:00"
+    params:
+        tag = "{sample}_{run}"
+    shell:'''
+    mkdir -p 2-QC/2.4a-ribodetector && \
+    seqkit stats -j16 -T -o {output.ReadStats} {input.ForEC} {input.RevEC} && \
+    mean_len=$(awk -F'	' 'NR>1 {{sum+=$7; count++}} END {{if (count > 0) printf "%.0f", sum/count}}' {output.ReadStats}) && \
+    micromamba run -n ribodetector ribodetector_cpu \
+    -i {input.ForEC} {input.RevEC} \
+    -l $mean_len \
+    -o {output.ForRD} {output.RevRD} \
+    -r {output.ForRRNA} {output.RevRRNA} \
+    -e rrna -t 16 --chunk_size 256 && \
+    touch {output.CheckRibodetector}
+    '''
+
+# Rule 2.5 PCR duplicate removal using clumpify
+rule PcrDuplicateRemoval:
+    input:
+        CheckRibodetector = "Checks/2.4a_ribodetector_{sample}_{run}.done",
+        ForRD = "2-QC/2.4a-ribodetector/{sample}_{run}_RD_R1.fq.gz",
+        RevRD = "2-QC/2.4a-ribodetector/{sample}_{run}_RD_R2.fq.gz",
     output:
         ForDedup="2-QC/2.5-Deduplication/{sample}_{run}_Dedup_R1.fq.gz",
         RevDedup="2-QC/2.5-Deduplication/{sample}_{run}_Dedup_R2.fq.gz",
         CheckDedup="Checks/2.5_Dedup_{sample}_{run}.done"
     resources:
         mem_mb=24000,
-        partition = "high2"
+        partition = "bmh"
     threads: 8
     params:
         tag="{sample}",
-        OutputDirectory = "2-QC/2.5-Deduplication"
+        OutputDirectory = "2-QC/2.5-Deduplication",
     message: "PCR duplicate removal using clumpify"
     shell:'''
         mkdir -p {params.OutputDirectory} && \
         clumpify.sh \
-            in={input.ForEC} \
-            in2={input.RevEC} \
+            in={input.ForRD} \
+            in2={input.RevRD} \
             out={output.ForDedup} \
             out2={output.RevDedup} \
             dedupe subs=0 passes=2 \
