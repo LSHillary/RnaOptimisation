@@ -28,4 +28,4 @@ cd MetaT
 micromamba activate ViromeDataProcessing
 
 # Run the pipeline
-snakemake --snakefile ../scripts/3-Assembly/3-Assembly_MetaT.smk --profile slurm
+snakemake --snakefile ../scripts/3-Assembly/3-Assembly_MetaT.smk --profile slurm --rerun-triggers mtime

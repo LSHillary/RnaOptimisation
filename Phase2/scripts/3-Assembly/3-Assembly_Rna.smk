@@ -53,8 +53,9 @@ rna_viromes = extract_items(data, ['Nucleotides', 'RNA', 'RnaViromes'])
 rule all:
     input:
         #CheckAssembly = expand("Checks/3-PostQCCleanup_{sample}.done", sample = dna_viromes),
-        CheckRenameAssemblyContigs = expand("Checks/3.2-RenameContigs_{sample}.done", sample = rna_viromes),
+        #CheckRenameAssemblyContigs = expand("Checks/3.2-RenameContigs_{sample}.done", sample = rna_viromes),
         CheckGenomad = expand("Checks/4.1-Genomad_{sample}.done", sample = rna_viromes),
+        CheckGenomadRerun = expand("Checks/4.4_GenomadRerun_{sample}.done", sample = rna_viromes),
 
 # Assembly of all samples by bucket using megahit
 rule Assembly_megahit:
@@ -120,6 +121,126 @@ rule GeNomadIndividual:
         touch {output.CheckGenomad}
         '''
 
+#### 4.2 - Contig Extension ####
+# 4.2.1 - Mapping
+rule CE_Mapping:
+    input:
+        FwdReadsRun1="2-QC/2.4a-ribodetector/{sample}_run1_RD_R1.fq.gz",
+        RevReadsRun1="2-QC/2.4a-ribodetector/{sample}_run1_RD_R2.fq.gz",
+        #FwdReadsRun2="2-QC/2.4a-ribodetector/{sample}_run2_EC_R1.fq.gz",
+        #RevReadsRun2="2-QC/2.4a-ribodetector/{sample}_run2_EC_R2.fq.gz",
+        Contigs = "3-Assembly/Contigs/{sample}_renamed_contigs.fna",
+        CheckGenomad = "Checks/4.1-Genomad_{sample}.done"
+    output:
+        Bam=temp("4-virus_identification/4.3-ContigExtension/{sample}_mapped.bam"),
+        FwdReadsAll=temp("4-virus_identification/4.3-ContigExtension/{sample}_mapped_R1.fq.gz"),
+        RevReadsAll=temp("4-virus_identification/4.3-ContigExtension/{sample}_mapped_R2.fq.gz"),
+        CheckMinimap2Mapping="Checks/4.3-ContigExtension_{sample}.done"
+    threads: 16
+    params:
+        tag = "{sample}"
+    resources:
+        mem_mb = 128000,
+        partition = "high2",
+        time = "3-00:00:00"
+    shell:'''
+        cat {input.FwdReadsRun1}  > {output.FwdReadsAll} && \
+        cat {input.RevReadsRun1}  > {output.RevReadsAll} && \
+        minimap2 -axsr -t {threads} {input.Contigs} {output.FwdReadsAll} {output.RevReadsAll} | samtools view -u | samtools sort -o {output.Bam} \
+        && \
+        touch {output.CheckMinimap2Mapping}
+        '''
+rule CE_CoverM:
+    input:
+        Bam="4-virus_identification/4.3-ContigExtension/{sample}_mapped.bam",
+        CheckMinimap2Mapping="Checks/4.3-ContigExtension_{sample}.done"
+    output:
+        Coverage = "4-virus_identification/4.3-ContigExtension/{sample}_coverage.txt",
+        CheckCoverM = "Checks/4.3-ContigExtension_{sample}_CoverM.done"
+    threads: 16
+    params:
+        tag = "{sample}",
+        CoverMPath = "4-virus_identification/4.3-ContigExtension/",
+        min_coverage = 75
+    resources:
+        mem_mb = 16000,
+        partition = "high2",
+        time = "19:00:00"
+    shell:'''
+        coverm contig -t {threads} --methods metabat --min-read-percent-identity 90 \
+        --bam-files {input.Bam} --output-format dense -o {output.Coverage} && \
+        touch {output.CheckCoverM}
+        '''
+rule CE_filtering:
+    input:
+        Fasta = "3-Assembly/Contigs/{sample}_renamed_contigs.fna",
+        Coverage = "4-virus_identification/4.3-ContigExtension/{sample}_coverage.txt",
+        CheckCoverM = "Checks/4.3-ContigExtension_{sample}_CoverM.done"
+    output:
+        Query = temp("4-virus_identification/4.3-ContigExtension/{sample}_query.fa"),
+        QueryContigNames = temp("4-virus_identification/4.3-ContigExtension/{sample}_query_contig_names.txt"),
+        CheckCE_filtering = "Checks/4.3-ContigExtension_{sample}_filtering.done",
+        CoverageDoc = "4-virus_identification/4.3-ContigExtension/{sample}_coverage_new.txt"
+    threads: 4
+    resources:
+        mem_mb = 8000,
+        partition = "high2"
+    params:
+        tag = "{sample}",
+        GenomadFasta = "4-virus_identification/genomad/{sample}/{sample}_renamed_contigs_summary/{sample}_renamed_contigs_virus.fna"
+    shell:'''
+        grep '^>' {params.GenomadFasta} | cut -d'|' -f1 | sed 's/>//' > {output.QueryContigNames} && \
+        seqtk subseq {input.Fasta} {output.QueryContigNames} > {output.Query} && 
+        python ../scripts/coverage.transfer.py -i {input.Coverage} -o {output.CoverageDoc} && \
+        touch {output.CheckCE_filtering}
+        '''
+rule ContigExtension:
+    input:
+        Fasta = "3-Assembly/Contigs/{sample}_renamed_contigs.fna",
+        Query = "4-virus_identification/4.3-ContigExtension/{sample}_query.fa",
+        CoverageDoc = "4-virus_identification/4.3-ContigExtension/{sample}_coverage_new.txt",
+        Bam="4-virus_identification/4.3-ContigExtension/{sample}_mapped.bam",
+        CheckCoverM = "Checks/4.3-ContigExtension_{sample}_CoverM.done",
+        CheckCE_filtering = "Checks/4.3-ContigExtension_{sample}_filtering.done"
+    output:
+        CheckCOBRA = "Checks/4.3-ContigExtension_COBRA_{sample}.done",
+    threads: 16
+    resources:
+        mem_mb = 48000,
+        cores = 16,
+        partition = "high2",
+        time = "3-00:00:00"
+    params:
+        tag = "{sample}",
+        output_folder = "4-virus_identification/4.3-ContigExtension/{sample}",
+    shell:'''
+    micromamba run -n COBRA_env cobra-meta -f {input.Fasta} -q {input.Query} -c {input.CoverageDoc} -m {input.Bam} -o {params.output_folder}_COBRA -a megahit -mink 27 -maxk 127 \
+    && \
+    touch {output.CheckCOBRA}
+    '''
+
+    #### 4.4 - Genomad Rerun ####
+rule GeNomadRerun:
+    input:
+        CheckCobra = "Checks/4.3-ContigExtension_COBRA_{sample}.done",
+    output:
+        CheckGenomadRerun = "Checks/4.4_GenomadRerun_{sample}.done"
+    threads: 16
+    resources:
+        mem_mb = 64000,
+        partition = "high2",
+        time = "3-00:00:00"
+    params:
+        tag = "{sample}_rerun",
+        GenomadDB = "/group/jbemersogrp/databases/genomad/genomad_db",
+        Contigs = "4-virus_identification/4.3-ContigExtension/{sample}_COBRA/{sample}_renamed_contigs.new.fa"
+    shell:'''
+        mkdir -p 4-virus_identification/genomad_rerun/{params.tag} && \
+        micromamba run -n genomad_env genomad end-to-end --cleanup --composition virome --enable-score-calibration -t {threads} {params.Contigs} \
+        4-virus_identification/genomad_rerun/{params.tag} {params.GenomadDB} \
+        && \
+        touch {output.CheckGenomadRerun}
+        '''
 
 # Clean up and archive all intermediate files not needed in future steps
 rule PostAssemblyCleanup:
